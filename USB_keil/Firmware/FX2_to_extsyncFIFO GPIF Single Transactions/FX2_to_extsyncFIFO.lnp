@@ -1,0 +1,11 @@
+"fw.obj",
+"dscr.obj",
+"FX2_to_extsyncFIFO.obj",
+"gpif.obj",
+".\EZUSB.LIB",
+".\USBJmpTb.OBJ" 
+TO "FX2_to_extsyncFIFO" 
+RAMSIZE(256) 
+DISABLEWARNING (16) 
+CODE( 0x0100 )
+XDATA( 0x1000 )

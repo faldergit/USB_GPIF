@@ -1,0 +1,603 @@
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 1   
+
+
+C51 COMPILER V7.07, COMPILATION OF MODULE FX2_TO_EXTSYNCFIFO
+OBJECT MODULE PLACED IN FX2_to_extsyncFIFO.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE FX2_to_extsyncFIFO.c OPTIMIZE(6,SPEED) INCDIR(C:\Users\admin\Downloads\AN66
+                    -806\FX2LP Source code and GPIF project files\Firmware\FX2_to_extsyncFIFO GPIF Single Transactions\;C:\Users\admin\Downlo
+                    -ads\AN66806\FX2LP Source code and GPIF project files\Firmware\GPIF Clock Divider\) DEBUG OBJECTEXTEND TABS(2)
+
+stmt level    source
+
+   1          #pragma NOIV               // Do not generate interrupt vectors
+   2          //-----------------------------------------------------------------------------
+   3          //   File:       FX2_to_extsyncFIFO.c
+   4          //   Contents:   Hooks required to implement FX2 GPIF to external sync. FIFO
+   5          //               interface using CY4265-15AC
+   6          //
+   7          //   Copyright (c) 2003 Cypress Semiconductor, Inc. All rights reserved
+   8          //-----------------------------------------------------------------------------
+   9          #include "fx2.h"
+  10          #include "fx2regs.h"
+  11          #include "fx2sdly.h"            // SYNCDELAY macro, see Section 15.14 of FX2 Tech.
+  12                                          // Ref. Manual for usage details.
+  13          
+  14          #define EXTFIFONOTFULL  (GPIFREADYSTAT & bmBIT1)
+  15          #define EXTFIFONOTEMPTY (GPIFREADYSTAT & bmBIT0)
+  16          #define LED_ALL         (bmBIT0 | bmBIT1 | bmBIT2 | bmBIT3)
+  17          
+  18          extern BOOL GotSUD;             // Received setup data flag
+  19          extern BOOL Sleep;
+  20          extern BOOL Rwuen;
+  21          extern BOOL Selfpwr;
+  22          
+  23          BYTE Configuration;             // Current configuration
+  24          BYTE AlternateSetting;          // Alternate settings
+  25          static WORD xdata LED_Count = 0;
+  26          static BYTE xdata LED_Status = 0;
+  27          BOOL in_enable = FALSE;         // flag to enable IN transfers
+  28          
+  29          //-----------------------------------------------------------------------------
+  30          // Task Dispatcher hooks
+  31          // The following hooks are called by the task dispatcher.
+  32          //-----------------------------------------------------------------------------
+  33          void LED_Off (BYTE LED_Mask);
+  34          void LED_On (BYTE LED_Mask);
+  35          void GpifInit ();
+  36          
+  37          void GPIF_SingleByteWrite (BYTE gdata)
+  38          {
+  39   1        while( !( GPIFTRIG & 0x80 ) )  // poll GPIFTRIG.7 Done bit
+  40   1        {
+  41   2           ;
+  42   2        }
+  43   1      
+  44   1        XGPIFSGLDATLX = gdata;         // trigger GPIF Single Byte Write transaction
+  45   1      }
+  46          
+  47          void GPIF_SingleByteRead (BYTE xdata *gdata)
+  48          {
+  49   1        static BYTE g_data = 0x00;     // dummy variable
+  50   1      
+  51   1        while( !( GPIFTRIG & 0x80 ) )  // poll GPIFTRIG.7 Done bit
+  52   1        {
+  53   2           ;
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 2   
+
+  54   2        }
+  55   1      
+  56   1        // using register in XDATA space, dummy read
+  57   1        g_data = XGPIFSGLDATLX;        // trigger GPIF Single Byte Read transaction
+  58   1      
+  59   1        while( !( GPIFTRIG & 0x80 ) )  // poll GPIFTRIG.7 Done bit
+  60   1        {
+  61   2           ;
+  62   2        }
+  63   1      
+  64   1        // using register in XDATA space, 
+  65   1        *gdata = XGPIFSGLDATLNOX;      // retrieve byte just read from ext. FIFO
+  66   1      }
+  67          
+  68          void GPIF_SingleWordWrite( WORD gdata )
+  69          {
+  70   1        while( !( GPIFTRIG & 0x80 ) )  // poll GPIFTRIG.7 Done bit
+  71   1        {
+  72   2          ;
+  73   2        }
+  74   1      
+  75   1        // using registers in XDATA space
+  76   1        XGPIFSGLDATH = gdata;              
+  77   1        XGPIFSGLDATLX = gdata >> 8;         // trigger GPIF Single Word Write transaction
+  78   1      }
+  79          
+  80          void GPIF_SingleWordRead( WORD xdata *gdata )
+  81          {
+  82   1        static BYTE g_data = 0x00;     // dummy variable
+  83   1      
+  84   1        while( !( GPIFTRIG & 0x80 ) )  // poll GPIFTRIG.7 Done bit
+  85   1        {
+  86   2           ;
+  87   2        }
+  88   1      
+  89   1        // using register in XDATA space
+  90   1        g_data = XGPIFSGLDATLX;        // dummy read to trigger GPIF 
+  91   1                                       // Single Word Read transaction
+  92   1      
+  93   1        while( !( GPIFTRIG & 0x80 ) )  // poll GPIFTRIG.7 Done bit
+  94   1        {
+  95   2           ;
+  96   2        }
+  97   1      
+  98   1        // using register(s) in XDATA space, retrieve word just read from ext. FIFO
+  99   1        *gdata = ( ( WORD )XGPIFSGLDATLNOX << 8 ) | ( WORD )XGPIFSGLDATH;
+ 100   1      }
+ 101          
+ 102          
+ 103          void TD_Init(void)             // Called once at startup
+ 104          {
+ 105   1        // set the CPU clock to 48MHz
+ 106   1        CPUCS = ((CPUCS & ~bmCLKSPD) | bmCLKSPD1);
+ 107   1        SYNCDELAY;
+ 108   1        
+ 109   1        EP2CFG = 0xA0;     // EP2OUT, bulk, size 512, 4x buffered
+ 110   1        SYNCDELAY;                    
+ 111   1        EP4CFG = 0x00;     // EP4 not valid
+ 112   1        SYNCDELAY;                    
+ 113   1        EP6CFG = 0xE0;     // EP6IN, bulk, size 512, 4x buffered
+ 114   1        SYNCDELAY;                    
+ 115   1        EP8CFG = 0x00;     // EP8 not valid
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 3   
+
+ 116   1        SYNCDELAY;
+ 117   1        
+ 118   1        EP2FIFOCFG = 0x01; // manual mode, disable PKTEND zero length send, word ops
+ 119   1        SYNCDELAY;
+ 120   1        EP6FIFOCFG = 0x01; // manual mode, disable PKTEND zero length send, word ops
+ 121   1        SYNCDELAY;
+ 122   1      
+ 123   1        FIFORESET = 0x80;  // set NAKALL bit to NAK all transfers from host
+ 124   1        SYNCDELAY;
+ 125   1        FIFORESET = 0x02;  // reset EP2 FIFO
+ 126   1        SYNCDELAY;
+ 127   1        FIFORESET = 0x06;  // reset EP6 FIFO
+ 128   1        SYNCDELAY;
+ 129   1        FIFORESET = 0x00;  // clear NAKALL bit to resume normal operation
+ 130   1        SYNCDELAY;
+ 131   1      
+ 132   1        // out endpoints do not come up armed
+ 133   1        // since EP2OUT is quad buffered we must write dummy byte counts four times
+ 134   1                        
+ 135   1        EP2BCL = 0x80;     // arm EP2OUT by writing byte count w/skip.
+ 136   1        SYNCDELAY;                    
+ 137   1        EP2BCL = 0x80;
+ 138   1        SYNCDELAY;                    
+ 139   1        EP2BCL = 0x80;
+ 140   1        SYNCDELAY;
+ 141   1        EP2BCL = 0x80;
+ 142   1        SYNCDELAY;
+ 143   1      
+ 144   1        GpifInit (); // initialize GPIF registers
+ 145   1      
+ 146   1        // reset the external FIFO
+ 147   1      
+ 148   1        OEA |= 0x04;     // turn on PA2 as output pin
+ 149   1        IOA |= 0x04;     // pull PA2 high initially   
+ 150   1        IOA &= 0xFB;     // bring PA2 low
+ 151   1        EZUSB_Delay (1); // keep PA2 low for ~1ms, more than enough time
+ 152   1        IOA |= 0x04;     // bring PA2 high   
+ 153   1      }
+ 154          
+ 155          void TD_Poll(void)
+ 156          {
+ 157   1        WORD xdata  i;            // loop index
+ 158   1        WORD xdata  *Source;      // ptr to source buffer
+ 159   1        WORD xdata  *Destination; // ptr to destination buffer
+ 160   1        WORD xdata  Tcount;       // transaction counter
+ 161   1      
+ 162   1        if(!(EP2468STAT & bmEP2EMPTY) && (EXTFIFONOTFULL))
+ 163   1        {
+ 164   2          // if host sent data to EP2OUT AND external FIFO is not full,
+ 165   2      
+ 166   2          Tcount = (EP2BCH << 8) + EP2BCL; // load transaction count with EP2 byte count
+ 167   2          Tcount /= 2;                     // divide by 2 for word wide transaction
+ 168   2          Source = (WORD *)(&EP2FIFOBUF);
+ 169   2          for( i = 0x0000; i < Tcount; i++ )
+ 170   2          {
+ 171   3            // transfer data from EP2OUT buffer to external FIFO
+ 172   3            GPIF_SingleWordWrite (*Source);
+ 173   3            Source++;
+ 174   3          }
+ 175   2          EP2BCL = 0x80; // re-arm EP2OUT
+ 176   2        }
+ 177   1          
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 4   
+
+ 178   1        if(in_enable) // if IN transfers are enabled,
+ 179   1        {
+ 180   2          if(!(EP2468STAT & bmEP6FULL) && (EXTFIFONOTEMPTY))
+ 181   2          {
+ 182   3            // if EP6IN is not full AND there is data in the external FIFO,
+ 183   3      
+ 184   3            Destination = (WORD *)(&EP6FIFOBUF);
+ 185   3            for( i = 0x0000; i < Tcount; i++ )
+ 186   3            {
+ 187   4              // transfer data from external FIFO to EP6IN buffer
+ 188   4              GPIF_SingleWordRead (Destination);
+ 189   4              Destination++;
+ 190   4            }
+ 191   3          Tcount *= 2;          // multiply by 2 to obtain byte count value    
+ 192   3            EP6BCH = MSB(Tcount);  
+ 193   3            SYNCDELAY;  
+ 194   3            EP6BCL = LSB(Tcount); // arm EP6IN to send data to the host
+ 195   3            SYNCDELAY;                    
+ 196   3          }
+ 197   2        }
+ 198   1      
+ 199   1        // blink LED0 to indicate firmware is running
+ 200   1      
+ 201   1        if (++LED_Count == 10000)
+ 202   1        {
+ 203   2          if (LED_Status)
+ 204   2          {
+ 205   3            LED_Off (bmBIT0);
+ 206   3            LED_Status = 0;
+ 207   3          }
+ 208   2          else
+ 209   2          {
+ 210   3            LED_On (bmBIT0);
+ 211   3            LED_Status = 1;
+ 212   3          }
+ 213   2          LED_Count = 0;
+ 214   2        }
+ 215   1      
+ 216   1      }
+ 217          
+ 218          BOOL TD_Suspend(void)          // Called before the device goes into suspend mode
+ 219          {
+ 220   1         return(TRUE);
+ 221   1      }
+ 222          
+ 223          BOOL TD_Resume(void)          // Called after the device resumes
+ 224          {
+ 225   1         return(TRUE);
+ 226   1      }
+ 227          
+ 228          //-----------------------------------------------------------------------------
+ 229          // Device Request hooks
+ 230          //   The following hooks are called by the end point 0 device request parser.
+ 231          //-----------------------------------------------------------------------------
+ 232          
+ 233          BOOL DR_GetDescriptor(void)
+ 234          {
+ 235   1         return(TRUE);
+ 236   1      }
+ 237          
+ 238          BOOL DR_SetConfiguration(void)   // Called when a Set Configuration command is received
+ 239          {
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 5   
+
+ 240   1         Configuration = SETUPDAT[2];
+ 241   1         return(TRUE);            // Handled by user code
+ 242   1      }
+ 243          
+ 244          BOOL DR_GetConfiguration(void)   // Called when a Get Configuration command is received
+ 245          {
+ 246   1         EP0BUF[0] = Configuration;
+ 247   1         EP0BCH = 0;
+ 248   1         EP0BCL = 1;
+ 249   1         return(TRUE);            // Handled by user code
+ 250   1      }
+ 251          
+ 252          BOOL DR_SetInterface(void)       // Called when a Set Interface command is received
+ 253          {
+ 254   1         AlternateSetting = SETUPDAT[2];
+ 255   1         return(TRUE);            // Handled by user code
+ 256   1      }
+ 257          
+ 258          BOOL DR_GetInterface(void)       // Called when a Set Interface command is received
+ 259          {
+ 260   1         EP0BUF[0] = AlternateSetting;
+ 261   1         EP0BCH = 0;
+ 262   1         EP0BCL = 1;
+ 263   1         return(TRUE);            // Handled by user code
+ 264   1      }
+ 265          
+ 266          BOOL DR_GetStatus(void)
+ 267          {
+ 268   1         return(TRUE);
+ 269   1      }
+ 270          
+ 271          BOOL DR_ClearFeature(void)
+ 272          {
+ 273   1         return(TRUE);
+ 274   1      }
+ 275          
+ 276          BOOL DR_SetFeature(void)
+ 277          {
+ 278   1         return(TRUE);
+ 279   1      }
+ 280          
+ 281          #define VX_B2 0xB2 // reset external FIFO
+ 282          #define VX_B3 0xB3 // enable IN transfers
+ 283          #define VX_B4 0xB4 // disable IN transfers
+ 284          
+ 285          BOOL DR_VendorCmnd(void)
+ 286          {
+ 287   1        
+ 288   1        switch (SETUPDAT[1])
+ 289   1        {
+ 290   2          case VX_B2:
+ 291   2          { 
+ 292   3            // reset the external FIFO
+ 293   3      
+ 294   3            OEA |= 0x04;     // turn on PA2 as output pin
+ 295   3            IOA |= 0x04;     // pull PA2 high initially   
+ 296   3            IOA &= 0xFB;     // bring PA2 low
+ 297   3            EZUSB_Delay (1); // keep PA2 low for ~1ms, more than enough time
+ 298   3            IOA |= 0x04;     // bring PA2 high
+ 299   3      
+ 300   3            *EP0BUF = VX_B2;
+ 301   3          EP0BCH = 0;
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 6   
+
+ 302   3          EP0BCL = 1;                   // Arm endpoint with # bytes to transfer
+ 303   3          EP0CS |= bmHSNAK;             // Acknowledge handshake phase of device request
+ 304   3            break;
+ 305   3          }
+ 306   2        case VX_B3: // enable IN transfers
+ 307   2        {
+ 308   3          in_enable = TRUE;
+ 309   3      
+ 310   3            *EP0BUF = VX_B3;
+ 311   3            EP0BCH = 0;
+ 312   3          EP0BCL = 1;
+ 313   3          EP0CS |= bmHSNAK;
+ 314   3          break;
+ 315   3          }
+ 316   2        case VX_B4: // disable IN transfers
+ 317   2        {
+ 318   3          in_enable = FALSE;
+ 319   3      
+ 320   3            *EP0BUF = VX_B4;
+ 321   3            EP0BCH = 0;
+ 322   3          EP0BCL = 1;
+ 323   3          EP0CS |= bmHSNAK;
+ 324   3          break;
+ 325   3          }
+ 326   2          default:
+ 327   2              return(TRUE);
+ 328   2        }
+ 329   1      
+ 330   1        return(FALSE);
+ 331   1      }
+ 332          
+ 333          //-----------------------------------------------------------------------------
+ 334          // USB Interrupt Handlers
+ 335          //   The following functions are called by the USB interrupt jump table.
+ 336          //-----------------------------------------------------------------------------
+ 337          
+ 338          // Setup Data Available Interrupt Handler
+ 339          void ISR_Sudav(void) interrupt 0
+ 340          {
+ 341   1         GotSUD = TRUE;            // Set flag
+ 342   1         EZUSB_IRQ_CLEAR();
+ 343   1         USBIRQ = bmSUDAV;         // Clear SUDAV IRQ
+ 344   1      }
+ 345          
+ 346          // Setup Token Interrupt Handler
+ 347          void ISR_Sutok(void) interrupt 0
+ 348          {
+ 349   1         EZUSB_IRQ_CLEAR();
+ 350   1         USBIRQ = bmSUTOK;         // Clear SUTOK IRQ
+ 351   1      }
+ 352          
+ 353          void ISR_Sof(void) interrupt 0
+ 354          {
+ 355   1         EZUSB_IRQ_CLEAR();
+ 356   1         USBIRQ = bmSOF;            // Clear SOF IRQ
+ 357   1      }
+ 358          
+ 359          void ISR_Ures(void) interrupt 0
+ 360          {
+ 361   1         // whenever we get a USB reset, we should revert to full speed mode
+ 362   1         pConfigDscr = pFullSpeedConfigDscr;
+ 363   1         ((CONFIGDSCR xdata *) pConfigDscr)->type = CONFIG_DSCR;
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 7   
+
+ 364   1         pOtherConfigDscr = pHighSpeedConfigDscr;
+ 365   1         ((CONFIGDSCR xdata *) pOtherConfigDscr)->type = OTHERSPEED_DSCR;
+ 366   1      
+ 367   1         EZUSB_IRQ_CLEAR();
+ 368   1         USBIRQ = bmURES;         // Clear URES IRQ
+ 369   1      }
+ 370          
+ 371          void ISR_Susp(void) interrupt 0
+ 372          {
+ 373   1         Sleep = TRUE;
+ 374   1         EZUSB_IRQ_CLEAR();
+ 375   1         USBIRQ = bmSUSP;
+ 376   1      }
+ 377          
+ 378          void ISR_Highspeed(void) interrupt 0
+ 379          {
+ 380   1         if (EZUSB_HIGHSPEED())
+ 381   1         {
+ 382   2            pConfigDscr = pHighSpeedConfigDscr;
+ 383   2            ((CONFIGDSCR xdata *) pConfigDscr)->type = CONFIG_DSCR;
+ 384   2            pOtherConfigDscr = pFullSpeedConfigDscr;
+ 385   2            ((CONFIGDSCR xdata *) pOtherConfigDscr)->type = OTHERSPEED_DSCR;
+ 386   2         }
+ 387   1      
+ 388   1         EZUSB_IRQ_CLEAR();
+ 389   1         USBIRQ = bmHSGRANT;
+ 390   1      }
+ 391          void ISR_Ep0ack(void) interrupt 0
+ 392          {
+ 393   1      }
+ 394          void ISR_Stub(void) interrupt 0
+ 395          {
+ 396   1      }
+ 397          void ISR_Ep0in(void) interrupt 0
+ 398          {
+ 399   1      }
+ 400          void ISR_Ep0out(void) interrupt 0
+ 401          {
+ 402   1      }
+ 403          void ISR_Ep1in(void) interrupt 0
+ 404          {
+ 405   1      }
+ 406          void ISR_Ep1out(void) interrupt 0
+ 407          {
+ 408   1      }
+ 409          void ISR_Ep2inout(void) interrupt 0
+ 410          {
+ 411   1      }
+ 412          void ISR_Ep4inout(void) interrupt 0
+ 413          {
+ 414   1      }
+ 415          void ISR_Ep6inout(void) interrupt 0
+ 416          {
+ 417   1      }
+ 418          void ISR_Ep8inout(void) interrupt 0
+ 419          {
+ 420   1      }
+ 421          void ISR_Ibn(void) interrupt 0
+ 422          {
+ 423   1      }
+ 424          void ISR_Ep0pingnak(void) interrupt 0
+ 425          {
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 8   
+
+ 426   1      }
+ 427          void ISR_Ep1pingnak(void) interrupt 0
+ 428          {
+ 429   1      }
+ 430          void ISR_Ep2pingnak(void) interrupt 0
+ 431          {
+ 432   1      }
+ 433          void ISR_Ep4pingnak(void) interrupt 0
+ 434          {
+ 435   1      }
+ 436          void ISR_Ep6pingnak(void) interrupt 0
+ 437          {
+ 438   1      }
+ 439          void ISR_Ep8pingnak(void) interrupt 0
+ 440          {
+ 441   1      }
+ 442          void ISR_Errorlimit(void) interrupt 0
+ 443          {
+ 444   1      }
+ 445          void ISR_Ep2piderror(void) interrupt 0
+ 446          {
+ 447   1      }
+ 448          void ISR_Ep4piderror(void) interrupt 0
+ 449          {
+ 450   1      }
+ 451          void ISR_Ep6piderror(void) interrupt 0
+ 452          {
+ 453   1      }
+ 454          void ISR_Ep8piderror(void) interrupt 0
+ 455          {
+ 456   1      }
+ 457          void ISR_Ep2pflag(void) interrupt 0
+ 458          {
+ 459   1      }
+ 460          void ISR_Ep4pflag(void) interrupt 0
+ 461          {
+ 462   1      }
+ 463          void ISR_Ep6pflag(void) interrupt 0
+ 464          {
+ 465   1      }
+ 466          void ISR_Ep8pflag(void) interrupt 0
+ 467          {
+ 468   1      }
+ 469          void ISR_Ep2eflag(void) interrupt 0
+ 470          {
+ 471   1      }
+ 472          void ISR_Ep4eflag(void) interrupt 0
+ 473          {
+ 474   1      }
+ 475          void ISR_Ep6eflag(void) interrupt 0
+ 476          {
+ 477   1      }
+ 478          void ISR_Ep8eflag(void) interrupt 0
+ 479          {
+ 480   1      }
+ 481          void ISR_Ep2fflag(void) interrupt 0
+ 482          {
+ 483   1      }
+ 484          void ISR_Ep4fflag(void) interrupt 0
+ 485          {
+ 486   1      }
+ 487          void ISR_Ep6fflag(void) interrupt 0
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 9   
+
+ 488          {
+ 489   1      }
+ 490          void ISR_Ep8fflag(void) interrupt 0
+ 491          {
+ 492   1      }
+ 493          void ISR_GpifComplete(void) interrupt 0
+ 494          {
+ 495   1      }
+ 496          void ISR_GpifWaveform(void) interrupt 0
+ 497          {
+ 498   1      }
+ 499          
+ 500          // ...debug LEDs: accessed via movx reads only ( through CPLD )
+ 501          // it may be worth noting here that the default monitor loads at 0xC000
+ 502          xdata volatile const BYTE LED0_ON  _at_ 0x8000;
+ 503          xdata volatile const BYTE LED0_OFF _at_ 0x8100;
+ 504          xdata volatile const BYTE LED1_ON  _at_ 0x9000;
+ 505          xdata volatile const BYTE LED1_OFF _at_ 0x9100;
+ 506          xdata volatile const BYTE LED2_ON  _at_ 0xA000;
+ 507          xdata volatile const BYTE LED2_OFF _at_ 0xA100;
+ 508          xdata volatile const BYTE LED3_ON  _at_ 0xB000;
+ 509          xdata volatile const BYTE LED3_OFF _at_ 0xB100;
+ 510          // use this global variable when (de)asserting debug LEDs...
+ 511          BYTE xdata ledX_rdvar = 0x00;
+ 512          BYTE xdata LED_State = 0;
+ 513          void LED_Off (BYTE LED_Mask)
+ 514          {
+ 515   1        if (LED_Mask & bmBIT0)
+ 516   1        {
+ 517   2          ledX_rdvar = LED0_OFF;
+ 518   2          LED_State &= ~bmBIT0;
+ 519   2        }
+ 520   1        if (LED_Mask & bmBIT1)
+ 521   1        {
+ 522   2          ledX_rdvar = LED1_OFF;
+ 523   2          LED_State &= ~bmBIT1;
+ 524   2        }
+ 525   1        if (LED_Mask & bmBIT2)
+ 526   1        {
+ 527   2          ledX_rdvar = LED2_OFF;
+ 528   2          LED_State &= ~bmBIT2;
+ 529   2        }
+ 530   1        if (LED_Mask & bmBIT3)
+ 531   1        {
+ 532   2          ledX_rdvar = LED3_OFF;
+ 533   2          LED_State &= ~bmBIT3;
+ 534   2        }
+ 535   1      }
+ 536          
+ 537          void LED_On (BYTE LED_Mask)
+ 538          {
+ 539   1        if (LED_Mask & bmBIT0)
+ 540   1        {
+ 541   2          ledX_rdvar = LED0_ON;
+ 542   2          LED_State |= bmBIT0;
+ 543   2        }
+ 544   1        if (LED_Mask & bmBIT1)
+ 545   1        {
+ 546   2          ledX_rdvar = LED1_ON;
+ 547   2          LED_State |= bmBIT1;
+ 548   2        }
+ 549   1        if (LED_Mask & bmBIT2)
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 10  
+
+ 550   1        {
+ 551   2          ledX_rdvar = LED2_ON;
+ 552   2          LED_State |= bmBIT2;
+ 553   2        }
+ 554   1        if (LED_Mask & bmBIT3)
+ 555   1        {
+ 556   2          ledX_rdvar = LED3_ON;
+ 557   2          LED_State |= bmBIT3;
+ 558   2        }
+ 559   1      }
+ 560          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1091    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =      5       4
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      4       2
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      1    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

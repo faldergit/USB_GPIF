@@ -1,4 +1,4 @@
-C51 COMPILER V7.07   GPIF                                                                  07/13/2017 10:28:40 PAGE 1   
+C51 COMPILER V7.07   GPIF                                                                  07/13/2017 10:52:10 PAGE 1   
 
 
 C51 COMPILER V7.07, COMPILATION OF MODULE GPIF
@@ -62,7 +62,7 @@ stmt level    source
   51          // Int Trig No Int    No Int    No Int    No Int    No Int    No Int    No Int             
   52          // IF/Wait  Wait 1    Wait 1    IF        Wait 1    Wait 1    Wait 1    Wait 1             
   53          //   Term A                     EF#                                                        
-C51 COMPILER V7.07   GPIF                                                                  07/13/2017 10:28:40 PAGE 2   
+C51 COMPILER V7.07   GPIF                                                                  07/13/2017 10:52:10 PAGE 2   
 
   54          //   LFunc                      AND                                                        
   55          //   Term B                     EF#                                                        
@@ -126,7 +126,7 @@ stmt level    source
  113          // Sngl/CRC Default   Default   Default   Default   Default   Default   Default            
  114          // WEN#         1         1         1         1         1         1         1         1    
  115          // REN#         1         1         1         1         1         1         1         1    
-C51 COMPILER V7.07   GPIF                                                                  07/13/2017 10:28:40 PAGE 3   
+C51 COMPILER V7.07   GPIF                                                                  07/13/2017 10:52:10 PAGE 3   
 
  116          // OE#          1         1         1         1         1         1         1         1    
  117          // unused       0         0         0         0         0         0         0         0    
@@ -190,7 +190,7 @@ stmt level    source
  175          /* LFun  */ 0x00,     0x00,     0x00,     0x00,     0x00,     0x00,     0x00,     0x3F,
  176          // Wave 3 
  177          /* LenBr */ 0x01,     0x01,     0x01,     0x01,     0x01,     0x01,     0x01,     0x07,
-C51 COMPILER V7.07   GPIF                                                                  07/13/2017 10:28:40 PAGE 4   
+C51 COMPILER V7.07   GPIF                                                                  07/13/2017 10:52:10 PAGE 4   
 
  178          /* Opcode*/ 0x00,     0x00,     0x00,     0x00,     0x00,     0x00,     0x00,     0x00,
  179          /* Output*/ 0x07,     0x07,     0x07,     0x07,     0x07,     0x07,     0x07,     0x07,
@@ -254,7 +254,7 @@ stmt level    source
  237   1       
  238   1        GPIFREADYCFG = InitData[ 0 ];
  239   1        GPIFCTLCFG = InitData[ 1 ];
-C51 COMPILER V7.07   GPIF                                                                  07/13/2017 10:28:40 PAGE 5   
+C51 COMPILER V7.07   GPIF                                                                  07/13/2017 10:52:10 PAGE 5   
 
  240   1        GPIFIDLECS = InitData[ 2 ];
  241   1        GPIFIDLECTL = InitData[ 3 ];
@@ -318,7 +318,7 @@ MODULE INFORMATION:   STATIC OVERLAYABLE
    PDATA SIZE       =   ----    ----
    DATA SIZE        =   ----    ----
    IDATA SIZE       =   ----    ----
-C51 COMPILER V7.07   GPIF                                                                  07/13/2017 10:28:40 PAGE 6   
+C51 COMPILER V7.07   GPIF                                                                  07/13/2017 10:52:10 PAGE 6   
 
    BIT SIZE         =   ----    ----
 END OF MODULE INFORMATION.

@@ -1,4 +1,4 @@
-C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 1   
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:52:10 PAGE 1   
 
 
 C51 COMPILER V7.07, COMPILATION OF MODULE FX2_TO_EXTSYNCFIFO
@@ -62,7 +62,7 @@ stmt level    source
   51   1        while( !( GPIFTRIG & 0x80 ) )  // poll GPIFTRIG.7 Done bit
   52   1        {
   53   2           ;
-C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 2   
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:52:10 PAGE 2   
 
   54   2        }
   55   1      
@@ -126,7 +126,7 @@ stmt level    source
  113   1        EP6CFG = 0xE0;     // EP6IN, bulk, size 512, 4x buffered
  114   1        SYNCDELAY;                    
  115   1        EP8CFG = 0x00;     // EP8 not valid
-C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 3   
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:52:10 PAGE 3   
 
  116   1        SYNCDELAY;
  117   1        
@@ -190,7 +190,7 @@ stmt level    source
  175   2          EP2BCL = 0x80; // re-arm EP2OUT
  176   2        }
  177   1          
-C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 4   
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:52:10 PAGE 4   
 
  178   1        if(in_enable) // if IN transfers are enabled,
  179   1        {
@@ -254,7 +254,7 @@ stmt level    source
  237          
  238          BOOL DR_SetConfiguration(void)   // Called when a Set Configuration command is received
  239          {
-C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 5   
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:52:10 PAGE 5   
 
  240   1         Configuration = SETUPDAT[2];
  241   1         return(TRUE);            // Handled by user code
@@ -318,7 +318,7 @@ stmt level    source
  299   3      
  300   3            *EP0BUF = VX_B2;
  301   3          EP0BCH = 0;
-C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 6   
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:52:10 PAGE 6   
 
  302   3          EP0BCL = 1;                   // Arm endpoint with # bytes to transfer
  303   3          EP0CS |= bmHSNAK;             // Acknowledge handshake phase of device request
@@ -382,7 +382,7 @@ stmt level    source
  361   1         // whenever we get a USB reset, we should revert to full speed mode
  362   1         pConfigDscr = pFullSpeedConfigDscr;
  363   1         ((CONFIGDSCR xdata *) pConfigDscr)->type = CONFIG_DSCR;
-C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 7   
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:52:10 PAGE 7   
 
  364   1         pOtherConfigDscr = pHighSpeedConfigDscr;
  365   1         ((CONFIGDSCR xdata *) pOtherConfigDscr)->type = OTHERSPEED_DSCR;
@@ -446,7 +446,7 @@ stmt level    source
  423   1      }
  424          void ISR_Ep0pingnak(void) interrupt 0
  425          {
-C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 8   
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:52:10 PAGE 8   
 
  426   1      }
  427          void ISR_Ep1pingnak(void) interrupt 0
@@ -510,7 +510,7 @@ stmt level    source
  485          {
  486   1      }
  487          void ISR_Ep6fflag(void) interrupt 0
-C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 9   
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:52:10 PAGE 9   
 
  488          {
  489   1      }
@@ -574,7 +574,7 @@ stmt level    source
  547   2          LED_State |= bmBIT1;
  548   2        }
  549   1        if (LED_Mask & bmBIT2)
-C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:28:40 PAGE 10  
+C51 COMPILER V7.07   FX2_TO_EXTSYNCFIFO                                                    07/13/2017 10:52:10 PAGE 10  
 
  550   1        {
  551   2          ledX_rdvar = LED2_ON;

@@ -150,6 +150,13 @@ void TD_Init(void)             // Called once at startup
   IOA &= 0xFB;     // bring PA2 low
   EZUSB_Delay (1); // keep PA2 low for ~1ms, more than enough time
   IOA |= 0x04;     // bring PA2 high   
+
+  /******自行添加代码*****/
+  OEA|=0x80;  //set FX_SLCS PA7 as output pin
+  IOA|=0x80; //pull PA2 High  open FPGA's power
+
+  
+  
 }
 
 void TD_Poll(void)
